@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administrar Artículos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="/__/firebase/12.12.1/firebase-app-compat.js"></script>
+  <script defer src="/__/firebase/12.12.1/firebase-auth-compat.js"></script>
+  <script defer src="/__/firebase/12.12.1/firebase-firestore-compat.js"></script>
+  <script defer src="/__/firebase/12.12.1/firebase-storage-compat.js"></script>
+  <script defer src="/__/firebase/init.js"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.14.0/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="admin()" x-init="init()">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="index.html" class="text-gray-400 hover:text-gray-600 text-sm">← Ver tienda</a>
+        <span class="text-gray-200">|</span>
+        <h1 class="text-lg font-semibold text-gray-800">Administrar artículos</h1>
+      </div>
+      <button
+        x-show="user"
+        @click="signOut()"
+        class="text-sm text-gray-400 hover:text-red-500 transition-colors"
+      >Cerrar sesión</button>
+    </div>
+  </header>
+
+  <!-- Auth loading -->
+  <div x-show="loading" class="flex justify-center py-24">
+    <div class="h-8 w-8 rounded-full border-4 border-amber-400 border-r-transparent animate-spin"></div>
+  </div>
+
+  <!-- LOGIN -->
+  <div x-show="!loading && !user" class="flex items-center justify-center min-h-[80vh] px-4">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 max-w-sm w-full text-center">
+      <span class="text-5xl block mb-4">🔐</span>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">Acceso privado</h2>
+      <p class="text-gray-500 text-sm mb-8">Inicia sesión con tu cuenta de Google para administrar los artículos.</p>
+      <button
+        @click="signIn()"
+        class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-medium py-3 px-4 rounded-xl hover:bg-gray-50 shadow-sm transition-colors"
+      >
+        <svg class="w-5 h-5" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Continuar con Google
+      </button>
+    </div>
+  </div>
+
+  <!-- ACCESS DENIED -->
+  <div x-show="!loading && user && !authorized" class="flex items-center justify-center min-h-[80vh] px-4">
+    <div class="bg-white rounded-2xl shadow-sm border border-red-100 p-10 max-w-sm w-full text-center">
+      <span class="text-5xl block mb-4">🚫</span>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">Acceso denegado</h2>
+      <p class="text-gray-500 text-sm mb-6">
+        La cuenta <span class="font-medium" x-text="user?.email"></span> no tiene permisos para administrar este sitio.
+      </p>
+      <button @click="signOut()" class="text-sm text-red-500 hover:underline">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div x-show="!loading && authorized" class="max-w-4xl mx-auto px-4 py-8">
+
+    <!-- Welcome -->
+    <div class="flex items-center gap-3 mb-8">
+      <img :src="user?.photoURL" class="w-9 h-9 rounded-full" x-show="user?.photoURL">
+      <div>
+        <p class="font-medium text-gray-800" x-text="user?.displayName || user?.email"></p>
+        <p class="text-xs text-gray-400">Administrador</p>
+      </div>
+    </div>
+
+    <!-- Add product form -->
+    <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-8">
+      <h2 class="text-lg font-bold text-gray-800 mb-6">Agregar nuevo artículo</h2>
+
+      <form @submit.prevent="addProduct()" class="space-y-5">
+
+        <!-- Image upload -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Foto del artículo <span class="text-red-400">*</span></label>
+          <div
+            class="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition-colors"
+            @click="$refs.imageInput.click()"
+            x-show="!form.imagePreview"
+          >
+            <span class="text-4xl block mb-2">📷</span>
+            <p class="text-sm text-gray-500">Haz clic para seleccionar una foto</p>
+            <p class="text-xs text-gray-400 mt-1">JPG, PNG o WEBP</p>
+          </div>
+          <div x-show="form.imagePreview" class="relative inline-block">
+            <img :src="form.imagePreview" class="h-40 rounded-xl object-cover border border-gray-200">
+            <button
+              type="button"
+              @click="form.imagePreview = ''; form.imageFile = null; $refs.imageInput.value = ''"
+              class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-xs flex items-center justify-center hover:bg-red-600"
+            >✕</button>
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            x-ref="imageInput"
+            @change="handleImageSelect($event)"
+            class="hidden"
+          >
+        </div>
+
+        <!-- Name -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del artículo <span class="text-red-400">*</span></label>
+          <input
+            type="text"
+            x-model="form.name"
+            placeholder="Ej. Bicicleta de montaña"
+            required
+            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+          >
+        </div>
+
+        <!-- Price -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Precio <span class="text-red-400">*</span></label>
+          <div class="relative">
+            <span class="absolute left-4 top-2.5 text-gray-400 font-medium">$</span>
+            <input
+              type="number"
+              x-model="form.price"
+              placeholder="0"
+              min="0"
+              step="1"
+              required
+              class="w-full pl-8 pr-4 py-2.5 border border-gray-200 rounded-xl text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+            >
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Descripción <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <textarea
+            x-model="form.description"
+            placeholder="Estado del artículo, medidas, detalles relevantes..."
+            rows="3"
+            class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-none"
+          ></textarea>
+        </div>
+
+        <!-- Availability toggle for new product -->
+        <div class="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+          <div>
+            <p class="text-sm font-medium text-gray-700">Disponible para venta</p>
+            <p class="text-xs text-gray-400">Desactiva si el artículo ya fue vendido</p>
+          </div>
+          <button
+            type="button"
+            @click="form.available = !form.available"
+            :class="form.available
+              ? 'bg-amber-500'
+              : 'bg-gray-300'"
+            class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
+            :aria-checked="form.available.toString()"
+            role="switch"
+          >
+            <span
+              :class="form.available ? 'translate-x-5' : 'translate-x-0'"
+              class="inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            ></span>
+          </button>
+        </div>
+
+        <!-- Submit -->
+        <button
+          type="submit"
+          :disabled="uploading || !form.name || !form.price || !form.imageFile"
+          class="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+        >
+          <span x-show="uploading" class="h-4 w-4 rounded-full border-2 border-white border-r-transparent animate-spin"></span>
+          <span x-text="uploading ? 'Publicando...' : 'Publicar artículo'"></span>
+        </button>
+
+      </form>
+    </section>
+
+    <!-- Product list -->
+    <section>
+      <h2 class="text-lg font-bold text-gray-800 mb-4">
+        Artículos publicados
+        <span class="text-sm font-normal text-gray-400 ml-1" x-text="`(${products.length})`"></span>
+      </h2>
+
+      <div x-show="productsLoading" class="text-center py-10 text-gray-400">Cargando...</div>
+
+      <div x-show="!productsLoading && products.length === 0" class="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400">
+        Aún no hay artículos. Agrega el primero arriba.
+      </div>
+
+      <div x-show="!productsLoading" class="space-y-3">
+        <template x-for="product in products" :key="product.id">
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 p-4">
+            <img
+              :src="product.imageUrl"
+              :alt="product.name"
+              class="w-16 h-16 rounded-xl object-cover border border-gray-100 shrink-0"
+              @error="$el.src='https://placehold.co/64x64/f3f4f6/9ca3af?text=?'"
+            >
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-gray-800 truncate" x-text="product.name"></p>
+              <p class="text-sm text-amber-600 font-semibold" x-text="'$' + Number(product.price).toLocaleString('es')"></p>
+              <p class="text-xs text-gray-400 truncate mt-0.5" x-text="product.description || '—'"></p>
+            </div>
+            <div class="shrink-0 flex flex-col items-center gap-1.5">
+              <span class="text-xs font-medium"
+                :class="(product.available ?? true) ? 'text-green-600' : 'text-gray-400'"
+                x-text="(product.available ?? true) ? 'Disponible' : 'Vendido'"></span>
+              <button
+                type="button"
+                @click="toggleAvailable(product)"
+                :class="(product.available ?? true)
+                  ? 'bg-amber-500'
+                  : 'bg-gray-300'"
+                class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-1"
+                :aria-checked="((product.available ?? true)).toString()"
+                role="switch"
+                :title="(product.available ?? true) ? 'Marcar como vendido' : 'Marcar como disponible'"
+              >
+                <span
+                  :class="(product.available ?? true) ? 'translate-x-5' : 'translate-x-0'"
+                  class="inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+                ></span>
+              </button>
+            </div>
+            <button
+              @click="deleteProduct(product.id, product.imageUrl)"
+              class="shrink-0 text-gray-300 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-50"
+              title="Eliminar artículo"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+        </template>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    const AUTHORIZED_UID = 'MwM3NAqLQ4hup6AzI8SNhTohe1r2';
+
+    function admin() {
+      return {
+        user: null,
+        authorized: false,
+        products: [],
+        loading: true,
+        productsLoading: false,
+        uploading: false,
+        form: {
+          name: '',
+          price: '',
+          description: '',
+          available: true,
+          imageFile: null,
+          imagePreview: ''
+        },
+
+        async init() {
+          firebase.auth().onAuthStateChanged(async (user) => {
+            this.user = user;
+            this.authorized = user?.uid === AUTHORIZED_UID;
+            if (this.authorized) {
+              await this.loadProducts();
+            }
+            this.loading = false;
+          });
+        },
+
+        async signIn() {
+          const provider = new firebase.auth.GoogleAuthProvider();
+          try {
+            await firebase.auth().signInWithPopup(provider);
+          } catch (e) {
+            alert('Error al iniciar sesión: ' + e.message);
+          }
+        },
+
+        async signOut() {
+          await firebase.auth().signOut();
+          this.authorized = false;
+          this.products = [];
+        },
+
+        async loadProducts() {
+          this.productsLoading = true;
+          try {
+            const snap = await firebase.firestore()
+              .collection('products')
+              .orderBy('createdAt', 'desc')
+              .get();
+            this.products = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          } finally {
+            this.productsLoading = false;
+          }
+        },
+
+        handleImageSelect(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          this.form.imageFile = file;
+          this.form.imagePreview = URL.createObjectURL(file);
+        },
+
+        async addProduct() {
+          if (!this.form.name || !this.form.price || !this.form.imageFile) return;
+          this.uploading = true;
+          try {
+            const filename = `${Date.now()}_${this.form.imageFile.name}`;
+            const storageRef = firebase.storage().ref(`products/${filename}`);
+            await storageRef.put(this.form.imageFile);
+            const imageUrl = await storageRef.getDownloadURL();
+
+            await firebase.firestore().collection('products').add({
+              name: this.form.name.trim(),
+              price: Number(this.form.price),
+              description: this.form.description.trim(),
+              imageUrl,
+              available: this.form.available,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            this.form = { name: '', price: '', description: '', available: true, imageFile: null, imagePreview: '' };
+            await this.loadProducts();
+          } catch (e) {
+            alert('Error al publicar: ' + e.message);
+          } finally {
+            this.uploading = false;
+          }
+        },
+
+        async deleteProduct(id, imageUrl) {
+          if (!confirm('¿Eliminar este artículo? Esta acción no se puede deshacer.')) return;
+          try {
+            await firebase.firestore().collection('products').doc(id).delete();
+            if (imageUrl) {
+              try { await firebase.storage().refFromURL(imageUrl).delete(); } catch (_) {}
+            }
+            this.products = this.products.filter(p => p.id !== id);
+          } catch (e) {
+            alert('Error al eliminar: ' + e.message);
+          }
+        },
+
+        async toggleAvailable(product) {
+          const newValue = !(product.available ?? true);
+          try {
+            await firebase.firestore().collection('products').doc(product.id).update({ available: newValue });
+            product.available = newValue;
+          } catch (e) {
+            alert('Error al actualizar disponibilidad: ' + e.message);
+          }
+        }
+      };
+    }
+  </script>
+</body>
+</html>

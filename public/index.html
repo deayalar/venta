@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Venta en Casa</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="/__/firebase/12.12.1/firebase-app-compat.js"></script>
+  <script defer src="/__/firebase/12.12.1/firebase-firestore-compat.js"></script>
+  <script defer src="/__/firebase/init.js"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.14.0/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="store()" x-init="init()">
+
+  <!-- Header -->
+  <header class="bg-white shadow-sm sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🏠</span>
+        <h1 class="text-xl font-bold text-gray-800">Venta en Casa</h1>
+      </div>
+      <a href="admin.html" class="text-xs text-gray-300 hover:text-gray-500 transition-colors">Administrar</a>
+    </div>
+  </header>
+
+  <!-- Search / Hero -->
+  <div class="bg-amber-50 border-b border-amber-100 py-12">
+    <div class="max-w-6xl mx-auto px-4 text-center">
+      <h2 class="text-3xl font-bold text-gray-800 mb-2">Artículos en venta</h2>
+      <p class="text-gray-500 mb-8">Todo en buen estado. ¡Precio negociable!</p>
+      <div class="relative max-w-lg mx-auto">
+        <svg class="absolute left-4 top-3.5 h-5 w-5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+        <input
+          type="text"
+          placeholder="Buscar artículos..."
+          x-model="query"
+          @input="search()"
+          class="w-full pl-12 pr-4 py-3 rounded-2xl border border-amber-200 bg-white shadow-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+        >
+        <button
+          x-show="query"
+          @click="query = ''; search()"
+          class="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600"
+        >✕</button>
+      </div>
+      <p class="text-sm text-gray-400 mt-4" x-show="!loading">
+        <span x-text="filtered.length"></span>
+        <span x-text="filtered.length === 1 ? ' artículo encontrado' : ' artículos encontrados'"></span>
+      </p>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <main class="max-w-6xl mx-auto px-4 py-10">
+
+    <!-- Loading spinner -->
+    <div x-show="loading" class="flex flex-col items-center py-24 gap-4">
+      <div class="h-10 w-10 rounded-full border-4 border-amber-400 border-r-transparent animate-spin"></div>
+      <p class="text-gray-400">Cargando artículos...</p>
+    </div>
+
+    <!-- Empty state -->
+    <div x-show="!loading && filtered.length === 0" class="flex flex-col items-center py-24 gap-3">
+      <span class="text-6xl">📭</span>
+      <p class="text-gray-500 text-lg font-medium">Sin resultados</p>
+      <button @click="query = ''; search()" class="text-amber-600 text-sm hover:underline" x-show="query">
+        Limpiar búsqueda
+      </button>
+      <p class="text-gray-400 text-sm" x-show="!query">Aún no hay artículos publicados.</p>
+    </div>
+
+    <!-- Product grid -->
+    <div
+      x-show="!loading && filtered.length > 0"
+      class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+    >
+      <template x-for="product in paginated" :key="product.id">
+        <article class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group">
+          <div class="relative aspect-[4/3] overflow-hidden bg-gray-100">
+            <img
+              :src="product.imageUrl"
+              :alt="product.name"
+              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              @error="$el.src='https://placehold.co/600x450/f3f4f6/9ca3af?text=Sin+imagen'"
+            >
+            <template x-if="!(product.available ?? true)">
+              <span class="absolute top-3 left-3 bg-gray-800 text-white text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide opacity-90">
+                Vendido
+              </span>
+            </template>
+          </div>
+          <div class="p-5">
+            <div class="flex items-start justify-between gap-3 mb-2">
+              <h3 class="font-semibold text-gray-800 text-lg leading-snug" x-text="product.name"></h3>
+              <span
+                class="shrink-0 bg-amber-100 text-amber-700 font-bold text-sm px-3 py-1 rounded-full whitespace-nowrap"
+                x-text="formatPrice(product.price)"
+              ></span>
+            </div>
+            <p
+              x-show="product.description"
+              class="text-gray-500 text-sm leading-relaxed line-clamp-3"
+              x-text="product.description"
+            ></p>
+          </div>
+        </article>
+      </template>
+    </div>
+
+    <!-- Pagination -->
+    <div x-show="!loading && totalPages > 1" class="flex justify-center items-center gap-2 mt-12">
+      <button
+        @click="page--"
+        :disabled="page === 1"
+        class="px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >← Anterior</button>
+
+      <template x-for="p in totalPages" :key="p">
+        <button
+          @click="page = p"
+          :class="p === page
+            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+            : 'border-gray-200 text-gray-600 hover:bg-gray-50'"
+          class="w-9 h-9 rounded-xl border text-sm font-medium transition-colors"
+          x-text="p"
+        ></button>
+      </template>
+
+      <button
+        @click="page++"
+        :disabled="page === totalPages"
+        class="px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >Siguiente →</button>
+    </div>
+
+  </main>
+
+  <footer class="text-center text-gray-400 text-xs py-8 border-t border-gray-100 mt-8">
+    ¿Te interesa algún artículo? Contáctame directamente.
+  </footer>
+
+  <script>
+    function store() {
+      return {
+        products: [],
+        filtered: [],
+        query: '',
+        page: 1,
+        perPage: 6,
+        loading: true,
+
+        get paginated() {
+          const start = (this.page - 1) * this.perPage;
+          return this.filtered.slice(start, start + this.perPage);
+        },
+
+        get totalPages() {
+          return Math.ceil(this.filtered.length / this.perPage);
+        },
+
+        formatPrice(value) {
+          return '$' + Number(value).toLocaleString('es', { minimumFractionDigits: 0 });
+        },
+
+        search() {
+          const q = this.query.toLowerCase().trim();
+          this.filtered = q
+            ? this.products.filter(p =>
+                p.name.toLowerCase().includes(q) ||
+                (p.description || '').toLowerCase().includes(q)
+              )
+            : [...this.products];
+          this.page = 1;
+        },
+
+        async init() {
+          try {
+            const db = firebase.firestore();
+            const snap = await db.collection('products')
+              .orderBy('createdAt', 'desc')
+              .get();
+            this.products = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            this.filtered = [...this.products];
+          } catch (e) {
+            console.error('Error al cargar productos:', e);
+          } finally {
+            this.loading = false;
+          }
+        }
+      };
+    }
+  </script>
+</body>
+</html>
